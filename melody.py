@@ -105,13 +105,19 @@ def load_train_sample_tf(split=True,n_split = 4):
         pm = pretty_midi.PrettyMIDI(sample_file)
         instrument = pm.instruments[0]
         sample = []
-        for i, note in enumerate(instrument.notes):
+        sorted_notes = sorted(instrument.notes, key=lambda note: note.start)
+        prev_start = sorted_notes[0].start
+        for i, note in enumerate(sorted_notes):
+            start = note.start
+            end = note.end
+            step = note.start-prev_start
             duration = note.end - note.start
             total_time_interval += duration
             total_note += note.pitch
-            sample.append([note.pitch,duration])
-            # print(f'{i}: pitch={note.pitch}, note_name={note_name},'f' duration={duration:.4f}')
+            sample.append([note.pitch,start,end,step,duration])
+            prev_start = note.start
         train_samples.append(sample)
+        print(sample)
         j += 1
     if split:
         splited_part = []
@@ -202,10 +208,9 @@ def sampling_mini_batch(samples):
     target_mini_batch = torch.Tensor(np.array(target_mini_batch)).to(device)
     return input_mini_batch,target_mini_batch
     
-samples1,avg_time,avg_note = load_train_sample(language=language,split=split,n_split=n_split)
-samples2,avg_time,avg_note = load_train_sample_tf(split=split,n_split=n_split)
-samples3,avg_time,avg_note = load_train_sample_train(split=split,n_split=n_split)
-samples = samples1+samples2+samples3
+# samples1,avg_time,avg_note = load_train_sample(language=language,split=split,n_split=n_split)
+# samples2,avg_time,avg_note = load_train_sample_train(split=split,n_split=n_split)
+samples,avg_time,avg_note = load_train_sample_tf(split=split,n_split=n_split)
 norm = torch.Tensor(np.array([avg_time,(1/note_weight)*avg_note])).to(device)
 model = Net().to(device)
 optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
