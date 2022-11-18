@@ -28,18 +28,10 @@ class RNN(nn.Module):
 class Net(nn.Module):
     def __init__(self):
         super(Net,self).__init__()
-        self.rnn = RNN(2,2)
-        self.fc1 = nn.Linear(2,256)
-        self.fc2 = nn.Linear(256,256)
-        self.fc3 = nn.Linear(256,256)
-        self.fc4 = nn.Linear(256,256)
-        self.fc5 = nn.Linear(256,2)
+        self.lstm = nn.LSTM(5,32, batch_first=True, bidirectional=True)
         
-    def forward(self,x):
-        x = self.rnn(x)
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        x = F.relu(self.fc3(x))
-        x = F.relu(self.fc4(x))
-        x = self.fc5(x)
-        return x
+    def forward(self, x1, x2):
+        _, (h_n_1, _) = self.lstm(x1)
+        _, (h_n_2, _) = self.lstm(x2)
+        dist = F.normalize(h_n_1 - h_n_2)
+        return dist
