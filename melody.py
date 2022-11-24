@@ -17,9 +17,9 @@ with open(os.path.dirname(os.path.realpath(__file__))+'/loss_data/loss.pickle', 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 learning_rate = 0.00001
 split = True
-n_split = 16
+n_split = 8
 language = 'both'
-batch_size = 512
+batch_size = 256
 epoch = 5000
 note_weight=3
 
@@ -198,17 +198,18 @@ def sampling_mini_batch(samples):
     for _ in range(n_seq):
         globals()['input'+str(_+1)] = []
     for i in mini_batch:
+        # print('adasdaskdbsad')
         target_mini_batch.append(i[1])
         for j in range(1,n_seq+1):
-            globals()['input'+str(j)].append(i[0][0])
-    input_mini_batch = [input1,input2,input3,input4]
-
+            globals()['input'+str(j)].append(i[0][j-1])
+    for k in range(1,n_seq+1): 
+        input_mini_batch.append(globals()['input'+str(k)])
     input_mini_batch = torch.Tensor(np.array(input_mini_batch)).to(device)
     target_mini_batch = torch.Tensor(np.array(target_mini_batch)).to(device)
     return input_mini_batch,target_mini_batch
     
 # samples1,avg_time,avg_note = load_train_sample(language=language,split=split,n_split=n_split)
-# samples2,avg_time,avg_note = load_train_sample_train(split=split,n_split=n_split)
+# samples,avg_time,avg_note = load_train_sample_train(split=split,n_split=n_split)
 samples,avg_time,avg_note = load_train_sample_tf(split=split,n_split=n_split)
 norm = torch.Tensor(np.array([avg_time,(1/note_weight)*avg_note])).to(device)
 model = Net().to(device)
@@ -216,7 +217,6 @@ optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 for _ in range(epoch):
     input_mini_batch,target_mini_batch = sampling_mini_batch(samples)
     y_pred = model(input_mini_batch)
-    # loss = ((y_pred/norm-target_mini_batch/norm).squeeze()**2).mean()
     loss = ((y_pred-target_mini_batch).squeeze()**2).mean()
     optimizer.zero_grad()
     loss.backward()
