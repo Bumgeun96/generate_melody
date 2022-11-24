@@ -18,7 +18,7 @@ class RNN(nn.Module):
         self.rnn = nn.RNNCell(input_dim,hidden_size)
 
     def forward(self, inputs):
-        # input.shape = (4, 256, 2)
+        # input.shape = (4, 256, 5)
         bz = inputs.shape[1] #batch_size
         ht = torch.zeros((bz,hidden_size)).to(device)
         for i in inputs:

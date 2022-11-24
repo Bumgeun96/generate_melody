@@ -117,7 +117,6 @@ def load_train_sample_tf(split=True,n_split = 4):
             sample.append([note.pitch,start,end,step,duration])
             prev_start = note.start
         train_samples.append(sample)
-        print(sample)
         j += 1
     if split:
         splited_part = []
