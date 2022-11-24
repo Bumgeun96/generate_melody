@@ -17,9 +17,9 @@ with open(os.path.dirname(os.path.realpath(__file__))+'/loss_data/loss.pickle', 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 learning_rate = 0.00001
 split = True
-n_split = 8
+n_split = 4
 language = 'both'
-batch_size = 256
+batch_size = 2
 epoch = 5000
 note_weight=3
 
@@ -118,6 +118,7 @@ def load_train_sample_tf(split=True,n_split = 4):
             prev_start = note.start
         train_samples.append(sample)
         j += 1
+        break
     if split:
         splited_part = []
         unit_number = n_split
@@ -160,7 +161,6 @@ def load_train_sample_train(split=True,n_split = 4):
             total_time_interval += duration
             total_note += note.pitch
             sample.append([note.pitch,duration])
-            # print(f'{i}: pitch={note.pitch}, note_name={note_name},'f' duration={duration:.4f}')
         train_samples.append(sample)
         j += 1
     if split:
@@ -193,17 +193,9 @@ def sampling_mini_batch(samples):
     mini_batch = random.sample(samples,batch_size)
     input_mini_batch =[]
     target_mini_batch = []
-    
-    n_seq = len(mini_batch[0][0])
-    for _ in range(n_seq):
-        globals()['input'+str(_+1)] = []
     for i in mini_batch:
-        # print('adasdaskdbsad')
         target_mini_batch.append(i[1])
-        for j in range(1,n_seq+1):
-            globals()['input'+str(j)].append(i[0][j-1])
-    for k in range(1,n_seq+1): 
-        input_mini_batch.append(globals()['input'+str(k)])
+        input_mini_batch.append(i[0])
     input_mini_batch = torch.Tensor(np.array(input_mini_batch)).to(device)
     target_mini_batch = torch.Tensor(np.array(target_mini_batch)).to(device)
     return input_mini_batch,target_mini_batch
@@ -216,7 +208,8 @@ model = Net().to(device)
 optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 for _ in range(epoch):
     input_mini_batch,target_mini_batch = sampling_mini_batch(samples)
-    y_pred = model(input_mini_batch)
+    print(input_mini_batch)
+    y_pred = model(input_mini_batch,target_mini_batch)
     loss = ((y_pred-target_mini_batch).squeeze()**2).mean()
     optimizer.zero_grad()
     loss.backward()
