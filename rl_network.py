@@ -29,6 +29,10 @@ class actor(nn.Module):
 class critic(nn.Module):
     def __init__(self):
         super(critic, self).__init__()
+        self.max_pitch = 100
+        self.max_step = 1
+        self.max_duration = 1
+        self.max_action = torch.Tensor(np.array([self.max_pitch,self.max_step,self.max_duration])).to(DEVICE)
         self.fc1 = nn.Linear(5+3, 256)
         self.fc2 = nn.Linear(256, 256)
         self.fc3 = nn.Linear(256, 256)
