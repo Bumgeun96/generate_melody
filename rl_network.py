@@ -13,7 +13,7 @@ class actor(nn.Module):
         self.max_step = 1
         self.max_duration = 1
         self.max_action = torch.Tensor(np.array([self.max_pitch,self.max_step,self.max_duration])).to(DEVICE)
-        self.fc1 = nn.Linear(5, 256)
+        self.fc1 = nn.Linear(3, 256)
         self.fc2 = nn.Linear(256, 256)
         self.fc3 = nn.Linear(256, 256)
         self.action_out = nn.Linear(256, 3)
@@ -33,7 +33,7 @@ class critic(nn.Module):
         self.max_step = 1
         self.max_duration = 1
         self.max_action = torch.Tensor(np.array([self.max_pitch,self.max_step,self.max_duration])).to(DEVICE)
-        self.fc1 = nn.Linear(5+3, 256)
+        self.fc1 = nn.Linear(3+3, 256)
         self.fc2 = nn.Linear(256, 256)
         self.fc3 = nn.Linear(256, 256)
         self.q_out = nn.Linear(256, 1)

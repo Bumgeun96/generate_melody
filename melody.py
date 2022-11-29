@@ -108,13 +108,13 @@ def load_train_sample_tf(split=True,n_split = 4):
         sorted_notes = sorted(instrument.notes, key=lambda note: note.start)
         prev_start = sorted_notes[0].start
         for i, note in enumerate(sorted_notes):
-            start = note.start
-            end = note.end
+            # start = note.start
+            # end = note.end
             step = note.start-prev_start
             duration = note.end - note.start
             total_time_interval += duration
             total_note += note.pitch
-            sample.append([note.pitch,start,end,step,duration])
+            sample.append([note.pitch,step,duration])
             prev_start = note.start
         train_samples.append(sample)
         j += 1
@@ -208,7 +208,6 @@ model = Net().to(device)
 optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 for _ in range(epoch):
     input_mini_batch,target_mini_batch = sampling_mini_batch(samples)
-    print(input_mini_batch)
     y_pred = model(input_mini_batch,target_mini_batch)
     loss = ((y_pred-target_mini_batch).squeeze()**2).mean()
     optimizer.zero_grad()

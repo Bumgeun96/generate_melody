@@ -28,7 +28,7 @@ class RNN(nn.Module):
 class Net(nn.Module):
     def __init__(self):
         super(Net,self).__init__()
-        self.lstm = nn.LSTM(5,32, batch_first=True, bidirectional=True)
+        self.lstm = nn.LSTM(3,32, batch_first=True, bidirectional=True)
         
     def forward(self, x1, x2):
         _, (h_n_1, _) = self.lstm(x1)
