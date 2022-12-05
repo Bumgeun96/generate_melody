@@ -17,9 +17,9 @@ with open(os.path.dirname(os.path.realpath(__file__))+'/loss_data/loss.pickle', 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 learning_rate = 0.00001
 split = True
-n_split = 4
+n_split = 2
 language = 'both'
-batch_size = 2
+batch_size = 1
 epoch = 5000
 note_weight=3
 

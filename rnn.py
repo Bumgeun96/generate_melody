@@ -33,5 +33,6 @@ class Net(nn.Module):
     def forward(self, x1, x2):
         _, (h_n_1, _) = self.lstm(x1)
         _, (h_n_2, _) = self.lstm(x2)
-        dist = F.normalize(h_n_1 - h_n_2)
-        return dist
+        score = torch.bmm(h_n_1, h_n_2)
+        loss = -F.logsigmoid(score).squeeze()
+        return loss.mean()
