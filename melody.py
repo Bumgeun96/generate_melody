@@ -17,9 +17,9 @@ with open(os.path.dirname(os.path.realpath(__file__))+'/loss_data/loss.pickle', 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 learning_rate = 0.00001
 split = True
-n_split = 2
+n_split = 30
 language = 'both'
-batch_size = 1
+batch_size = 512
 epoch = 5000
 note_weight=3
 
@@ -118,7 +118,7 @@ def load_train_sample_tf(split=True,n_split = 4):
             prev_start = note.start
         train_samples.append(sample)
         j += 1
-        break
+        # break
     if split:
         splited_part = []
         unit_number = n_split
@@ -209,7 +209,10 @@ optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 for _ in range(epoch):
     input_mini_batch,target_mini_batch = sampling_mini_batch(samples)
     y_pred = model(input_mini_batch,target_mini_batch)
-    loss = ((y_pred-target_mini_batch).squeeze()**2).mean()
+    error = (y_pred-target_mini_batch)
+    error -= torch.Tensor(np.array([65,0.5,0.495])).to(device)
+    error /= torch.Tensor(np.array([70/2,1/2,0.495/2])).to(device)
+    loss = ((error).squeeze()**2).mean()
     optimizer.zero_grad()
     loss.backward()
     optimizer.step()
