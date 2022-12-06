@@ -31,7 +31,7 @@ class Net(nn.Module):
         num_info = 5
         self.lstm = nn.LSTM(num_info, 32, proj_size=num_info, batch_first=True)
         
-    def forward(self, X, x5): # X: [batch_size, seq_length, 5], x5: [batch_size, 5]
+    def forward(self, X, x5): # X: [batch_size, seq_length, 3], x5: [batch_size, 3]
         _, (h_n_1, _) = self.lstm(X)
         score = torch.bmm(h_n_1.squeeze(), x5)
         loss = -F.logsigmoid(score).squeeze()
