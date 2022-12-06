@@ -3,6 +3,7 @@ import torch.nn as nn
 import torchvision
 import torch.nn.functional as F
 import torchvision.transforms as transforms
+import numpy as np
 
 
 # Device configuration
@@ -33,6 +34,11 @@ class Net(nn.Module):
         
     def forward(self, X, x5): # X: [batch_size, seq_length, 3], x5: [batch_size, 3]
         _, (h_n_1, _) = self.lstm(X)
-        score = torch.bmm(h_n_1.squeeze(), x5)
-        loss = -F.logsigmoid(score).squeeze()
-        return loss.mean()
+        # h_n_1: [30~100, 0~1, 0.01~1]
+        h_n_1= torch.Tensor(np.array([30, 0, 0.01])).to(device)+\
+               torch.Tensor(np.array([70, 1, 0.99])).to(device)*\
+               torch.sigmoid(h_n_1)
+        
+        # score = torch.bmm(h_n_1.squeeze(), x5)
+        # loss = -F.logsigmoid(score).squeeze()
+        return h_n_1
