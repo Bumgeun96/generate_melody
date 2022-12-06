@@ -42,3 +42,6 @@ class Net(nn.Module):
         # score = torch.bmm(h_n_1.squeeze(), x5)
         # loss = -F.logsigmoid(score).squeeze()
         return h_n_1
+    
+    def save_model(self, net, filename):
+        torch.save(net.state_dict(), filename)
