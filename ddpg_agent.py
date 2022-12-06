@@ -136,9 +136,9 @@ class ddpg:
         
     def select_action(self,action): # to exploration
         action = action.cpu().numpy().squeeze()
-        action += np.array([noise1,noise2,noise3])
-        action = np.clip(action,np.array([min1,min2,min3]),np.array([max1,max2,max3]))
-        random_actions = np.array([random.uniform(min1,max1),random.uniform(min2,max2),random.uniform(min3,max3)])
+        action += np.array([7,0.1,0.099])
+        action = np.clip(action,np.array([30,0,0.01]),np.array([100,1,1]))
+        random_actions = np.array([random.uniform(30,100),random.uniform(0,1),random.uniform(0.01,1)])
         action += np.random.binomial(1, 0.3, 3)[0] * (random_actions - action)
         return action
     
