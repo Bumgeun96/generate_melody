@@ -211,7 +211,7 @@ for _ in range(epoch):
     y_pred = model(input_mini_batch,target_mini_batch)
     error = (y_pred-target_mini_batch)
     error -= torch.Tensor(np.array([30,0,0.01])).to(device)
-    error /= torch.Tensor(np.array([70,1,0.99])).to(device)
+    error /= torch.Tensor(np.array([70/3,1/3,0.99/3])).to(device)
     loss = ((error).squeeze()**2).mean()
     optimizer.zero_grad()
     loss.backward()
