@@ -209,7 +209,7 @@ model = Net().to(device)
 optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 for _ in range(epoch):
     input_mini_batch,target_mini_batch = sampling_mini_batch(samples)
-    y_pred = model(input_mini_batch,target_mini_batch)
+    y_pred = model(input_mini_batch)
     error = (y_pred-target_mini_batch)
     error -= torch.Tensor(np.array([30,0,0.01])).to(device) #min: 0
     error /= torch.Tensor(np.array([70,1,0.99])).to(device) #max: 1
