@@ -1,6 +1,6 @@
 import csv
 import random
-from rnn import RNN,Net
+from rnn import Net
 import torch
 import torch.nn as nn
 import numpy as np
@@ -10,19 +10,6 @@ import tensorflow as tf
 import pretty_midi
 import pathlib
 import glob
-
-with open(os.path.dirname(os.path.realpath(__file__))+'/loss_data/loss.pickle', 'wb') as f:
-    pass
-# device
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-learning_rate = 0.00001
-split = True
-n_split = 30
-language = 'both'
-batch_size = 2048
-epoch = 5000
-note_weight=3
-CHECKPOINT= os.path.join(os.path.dirname(__file__), 'models/LSTM')
 
 def load_train_sample(language='both',split = True,n_split = 4):
     train_samples = []
@@ -85,65 +72,6 @@ def load_train_sample(language='both',split = True,n_split = 4):
         print('================================================')
         return train_samples,0.44281,67.42
 
-def load_train_sample_tf(split=True,n_split = 4):
-    total_time_interval = 0
-    total_note = 0
-    data_dir = pathlib.Path('data/maestro-v2.0.0')
-    if not data_dir.exists():
-        tf.keras.utils.get_file(
-            'maestro-v2.0.0-midi.zip',
-            origin='https://storage.googleapis.com/magentadata/datasets/maestro/v2.0.0/maestro-v2.0.0-midi.zip',
-            extract=True,
-            cache_dir='.', cache_subdir='data',
-        )
-    filenames = glob.glob(str(data_dir/'**/*.mid*'))
-    # print('Number of files:', len(filenames))
-    train_samples = []
-    j = 1
-    for filename in filenames:
-        print("loading sample:",str(j)+'/'+str(len(filenames)))
-        sample_file = filename
-        pm = pretty_midi.PrettyMIDI(sample_file)
-        instrument = pm.instruments[0]
-        sample = []
-        sorted_notes = sorted(instrument.notes, key=lambda note: note.start)
-        prev_start = sorted_notes[0].start
-        for i, note in enumerate(sorted_notes):
-            # start = note.start
-            # end = note.end
-            step = note.start-prev_start
-            duration = note.end - note.start
-            total_time_interval += duration
-            total_note += note.pitch
-            sample.append([note.pitch,step,duration])
-            prev_start = note.start
-        train_samples.append(sample)
-        j += 1
-        # break
-    if split:
-        splited_part = []
-        unit_number = n_split
-        j = 1
-        for sample in train_samples:
-            i = 0
-            print("spliting sample:",str(j)+'/'+str(len(filenames)))
-            while True:
-                if len(sample)-(unit_number) == i:
-                    break
-                splited_part.append([sample[i:i+unit_number],sample[i+unit_number]])
-                i += 1
-            j += 1
-        random.shuffle(splited_part)
-        print(len(splited_part),"split melodies are shuffled!")
-        note_number = len(splited_part)-n_split*len(train_samples)
-        avg_time_inteval = total_time_interval/note_number
-        avg_note = total_note/note_number
-        print('================================================')
-        return splited_part,avg_time_inteval,avg_note
-    else:
-        print('================================================')
-        return train_samples,0.44281,67.42
-    
 def load_train_sample_train(split=True,n_split = 4):
     total_time_interval = 0
     total_note = 0
@@ -189,39 +117,111 @@ def load_train_sample_train(split=True,n_split = 4):
     else:
         print('================================================')
         return train_samples,0.44281,67.42
-    
-def sampling_mini_batch(samples):
-    mini_batch = random.sample(samples,batch_size)
-    input_mini_batch =[]
-    target_mini_batch = []
-    for i in mini_batch:
-        target_mini_batch.append(i[1])
-        input_mini_batch.append(i[0])
-    input_mini_batch = torch.Tensor(np.array(input_mini_batch)).to(device)
-    target_mini_batch = torch.Tensor(np.array(target_mini_batch)).to(device)
-    return input_mini_batch,target_mini_batch
-    
+
 # samples1,avg_time,avg_note = load_train_sample(language=language,split=split,n_split=n_split)
 # samples,avg_time,avg_note = load_train_sample_train(split=split,n_split=n_split)
-samples,avg_time,avg_note = load_train_sample_tf(split=split,n_split=n_split)
-norm = torch.Tensor(np.array([avg_time,(1/note_weight)*avg_note])).to(device)
-model = Net().to(device)
-optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
-for _ in range(epoch):
-    input_mini_batch,target_mini_batch = sampling_mini_batch(samples)
-    y_pred = model(input_mini_batch)
-    error = (y_pred-target_mini_batch)
-    error -= torch.Tensor(np.array([30,0,0.01])).to(device) #min: 0
-    error /= torch.Tensor(np.array([70,1,0.99])).to(device) #max: 1
-    error *= torch.Tensor(np.array([2,1,1])).to(device) # weights
-    loss = ((error).squeeze()**2).mean()
-    optimizer.zero_grad()
-    loss.backward()
-    optimizer.step()
-    print('===================================')
-    print("epoch:"+str(_+1))
-    print("loss:"+str(loss.item()))
-    model.save_model(model,CHECKPOINT+'.pt')
+
+CHECKPOINT= os.path.join(os.path.dirname(__file__), 'models/LSTM')
+
+class melody_learning:
+    def __init__(self,n_split = 4):
+        with open(os.path.dirname(os.path.realpath(__file__))+'/loss_data/loss.pickle', 'wb') as f:
+            pass
+        # device
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.learning_rate = 0.00001
+        self.split = True
+        self.n_split = n_split
+        self.batch_size = 2048
+        self.epoch = 10000
+        
+    def load_train_sample_tf(self):
+        total_time_interval = 0
+        total_note = 0
+        data_dir = pathlib.Path('data/maestro-v2.0.0')
+        if not data_dir.exists():
+            tf.keras.utils.get_file(
+                'maestro-v2.0.0-midi.zip',
+                origin='https://storage.googleapis.com/magentadata/datasets/maestro/v2.0.0/maestro-v2.0.0-midi.zip',
+                extract=True,
+                cache_dir='.', cache_subdir='data',
+            )
+        filenames = glob.glob(str(data_dir/'**/*.mid*'))
+        # print('Number of files:', len(filenames))
+        train_samples = []
+        j = 1
+        for filename in filenames:
+            print("loading sample:",str(j)+'/'+str(len(filenames)))
+            sample_file = filename
+            pm = pretty_midi.PrettyMIDI(sample_file)
+            instrument = pm.instruments[0]
+            sample = []
+            sorted_notes = sorted(instrument.notes, key=lambda note: note.start)
+            prev_start = sorted_notes[0].start
+            for i, note in enumerate(sorted_notes):
+                # start = note.start
+                # end = note.end
+                step = note.start-prev_start
+                duration = note.end - note.start
+                total_time_interval += duration
+                total_note += note.pitch
+                sample.append([note.pitch,step,duration])
+                prev_start = note.start
+            train_samples.append(sample)
+            j += 1
+            # break
+        splited_part = []
+        unit_number = self.n_split
+        j = 1
+        for sample in train_samples:
+            i = 0
+            print("spliting sample:",str(j)+'/'+str(len(filenames)))
+            while True:
+                if len(sample)-(unit_number) == i:
+                    break
+                splited_part.append([sample[i:i+unit_number],sample[i+unit_number]])
+                i += 1
+            j += 1
+        random.shuffle(splited_part)
+        print(len(splited_part),"split melodies are shuffled!")
+        note_number = len(splited_part)-self.n_split*len(train_samples)
+        avg_time_inteval = total_time_interval/note_number
+        avg_note = total_note/note_number
+        print('================================================')
+        return splited_part,avg_time_inteval,avg_note
     
-    with open(os.path.dirname(os.path.realpath(__file__))+'/loss_data/loss.pickle', 'ab') as f:
-        pickle.dump(loss.item(),f)
+    def sampling_mini_batch(self,samples):
+        mini_batch = random.sample(samples,self.batch_size)
+        input_mini_batch =[]
+        target_mini_batch = []
+        for i in mini_batch:
+            target_mini_batch.append(i[1])
+            input_mini_batch.append(i[0])
+        input_mini_batch = torch.Tensor(np.array(input_mini_batch)).to(self.device)
+        target_mini_batch = torch.Tensor(np.array(target_mini_batch)).to(self.device)
+        return input_mini_batch,target_mini_batch
+        
+    def learning(self):
+        samples,avg_time,avg_note = self.load_train_sample_tf()
+        model = Net().to(self.device)
+        optimizer = torch.optim.Adam(model.parameters(), lr=self.learning_rate)
+        for _ in range(self.epoch):
+            input_mini_batch,target_mini_batch = self.sampling_mini_batch(samples)
+            y_pred = model(input_mini_batch)
+            error = (y_pred-target_mini_batch)
+            error -= torch.Tensor(np.array([30,0,0.01])).to(self.device) #min: 0
+            error /= torch.Tensor(np.array([70,1,0.99])).to(self.device) #max: 1
+            error *= torch.Tensor(np.array([5,1,1])).to(self.device) # weights
+            loss = ((error).squeeze()**2).mean()
+            print(loss)
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            print('===================LSTM training===================')
+            print("epoch:"+str(_+1))
+            print("loss:"+str(loss.item()))
+            model.save_model(model,CHECKPOINT+'.pt')
+            
+            with open(os.path.dirname(os.path.realpath(__file__))+'/loss_data/loss.pickle', 'ab') as f:
+                pickle.dump(loss.item(),f)
+        return samples

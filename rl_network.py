@@ -26,6 +26,9 @@ class actor(nn.Module):
         actions = self.max_action_b+self.max_action* torch.sigmoid(self.action_out(x))
         
         return actions
+    
+    def save_model(self, net, filename):
+        torch.save(net.state_dict(), filename)
 
 class critic(nn.Module):
     def __init__(self):
@@ -40,10 +43,13 @@ class critic(nn.Module):
         self.q_out = nn.Linear(256, 1)
 
     def forward(self, x, actions):
-        x = torch.cat([x, actions/self.max_action], dim=0)
+        x = torch.cat([x/self.max_action, actions/self.max_action], dim=1)
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
         x = F.relu(self.fc3(x))
         q_value = self.q_out(x)
 
         return q_value
+    
+    def save_model(self, net, filename):
+        torch.save(net.state_dict(), filename)

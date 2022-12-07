@@ -35,11 +35,12 @@ class Net(nn.Module):
     def forward(self, X): # X: [batch_size, seq_length, 3]
         
         _, (h_n_1, _) = self.lstm(X)
-        h_n_1 = F.sigmoid(h_n_1)
-        
+        h_n_1 = F.sigmoid(h_n_1).squeeze()
+
         # h_n_1: [30~100, 0~1, 0.01~1]
-        h_n_1[0] = 30 + 70*h_n_1[0]
-        h_n_1[2] = 0.01 + 0.99*h_n_1[2]
+        h_n_1 = torch.Tensor(np.array([30, 0, 0.01])).to(device)+\
+            torch.Tensor(np.array([70, 1, 0.99])).to(device)*\
+                h_n_1
         
         return h_n_1
     

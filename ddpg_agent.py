@@ -6,28 +6,49 @@ import tensorflow as tf
 import pretty_midi
 import pathlib
 import glob
+import os
+import pickle
+from rnn import Net
 
 from rl_network import actor,critic
 from replaybuffer import Memory
 
+# from train_RL import sample as SAMPLE
+CHECKPOINT= os.path.join(os.path.dirname(__file__), 'models/LSTM')
+CHECKPOINT_CRITIC = os.path.join(os.path.dirname(__file__), 'models/critic')
+CHECKPOINT_ACTOR = os.path.join(os.path.dirname(__file__), 'models/actor')
 
 class ddpg:
-    def __init__(self):
+    def __init__(self,n_split = 4,is_sample = False,sample = 0):
+        with open(os.path.dirname(os.path.realpath(__file__))+'/reward_data/reward.pickle', 'wb') as f:
+            pass
         ########hyperparameter########
         self.lr = 0.001
         self.memory_capacity = 100000
-        self.max_episode = 100000
-        self.n_split = 4
-        self.epi_step = 100
-        self.batch_size = 256
+        self.max_episode = 10000
+        self.n_split = n_split
+        self.epi_step = 500
+        self.batch_size = 2
         self.polyak = 0.95 #soft update target network
         self.gamma = 0.99
         
-        # loading sample
-        self.sample = self.loading_sample(n_split = self.n_split)
+        # is sample
+        self.is_sample = is_sample
         
-        #cuda
+        # cuda
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        
+        # loading LSTM model
+        self.net = Net().to(self.device)
+        self.net.load_state_dict(torch.load(CHECKPOINT + '.pt', map_location=torch.device(self.device)))
+        
+        # loading sample
+        if is_sample:
+            self.sample = sample
+        else:
+            self.sample = self.loading_sample(n_split = self.n_split)
+            
+        print(self.sample)
         
         # create the network
         self.actor_network = actor().to(self.device)
@@ -48,7 +69,7 @@ class ddpg:
         # create the replay buffer
         self.buffer = Memory(self.memory_capacity)
         
-    def loading_sample(n_split = 4): #how many past note is considered?
+    def loading_sample(self, n_split = 4): #how many past note is considered?
         total_time_interval = 0
         total_note = 0
         data_dir = pathlib.Path('data/maestro-v2.0.0')
@@ -71,16 +92,15 @@ class ddpg:
             sorted_notes = sorted(instrument.notes, key=lambda note: note.start)
             prev_start = sorted_notes[0].start
             for i, note in enumerate(sorted_notes):
-                start = note.start
-                end = note.end
                 step = note.start-prev_start
                 duration = note.end - note.start
                 total_time_interval += duration
                 total_note += note.pitch
-                sample.append([note.pitch,start,end,step,duration])
+                sample.append([note.pitch,step,duration])
                 prev_start = note.start
             train_samples.append(sample)
             j += 1
+            # break
         splited_part = []
         unit_number = n_split
         j = 1
@@ -98,9 +118,10 @@ class ddpg:
         print('================================================')
         return splited_part
     
-    def reset(samples):
+    def reset(self,samples):
         mini_batch = random.sample(samples,1)
         initial_state = mini_batch[0][0]
+        initial_state = torch.Tensor(np.array(initial_state)).to(self.device)
         return initial_state
     
     def update_network(self):
@@ -120,7 +141,7 @@ class ddpg:
         q_values = self.critic_network(states,actions)
         critic_loss = (target_q_value-q_values).pow(2).mean()
         actions_real = self.actor_network(states)
-        actor_loss= -self.critic_network(states,actions_real).mean()
+        actor_loss = -self.critic_network(states,actions_real).mean()
         
         #update
         self.actor_optim.zero_grad()
@@ -135,28 +156,51 @@ class ddpg:
             target_param.data.copy_((1 - self.polyak)*param.data + self.polyak*target_param.data)
         
     def select_action(self,action): # to exploration
-        action = action.cpu().numpy().squeeze()
+        action = action.cpu().detach().numpy()
         action += np.array([7,0.1,0.099])
         action = np.clip(action,np.array([30,0,0.01]),np.array([100,1,1]))
         random_actions = np.array([random.uniform(30,100),random.uniform(0,1),random.uniform(0.01,1)])
         action += np.random.binomial(1, 0.3, 3)[0] * (random_actions - action)
         return action
     
+    def get_reward(self,state,action):
+        state = state.cpu().detach().numpy()
+        normalized_error = (state - action)/np.array([70,1,0.99])
+        reward = -(normalized_error**2).mean()
+        return reward
+    
     def learn(self):
         for episode in range(1,self.max_episode+1):
             s = self.reset(self.sample)
             done = False
+            cumulative_reward = 0
             for _ in range(self.epi_step):
-                #state = pretrained_lstm_model(s)
-                #store_memory(prev_state,state,action,reward,done) #첫 스텝은 건너뛰도록 if문 설정하기
-                #action = select_action(actor(state))
-                #reward = -norm(dist(state,action)) #학습된 lstm의 output은 state지만, actor network의 output은 action이다. 그 차이를 좁히기 위해 거리에 마이너스를 취해 리워드로 만든다.
-                #s = [s[:-(n_split)],action]
-                #prev_state = state
+                state = self.net(s)
+                if not(_ == 0):
+                    action = action.squeeze()
+                    prev_state_ = prev_state.cpu().detach().numpy()
+                    state_ = state.cpu().detach().numpy()
+                    action_ = action.cpu().detach().numpy()
+                    self.buffer.push(prev_state_,state_,action_,reward,done)
+                action = self.select_action(self.actor_network(state))
+                #학습된 lstm의 output은 state지만, actor network의 output은 action이다. \
+                    # 그 차이를 좁히기 위해 거리에 마이너스를 취해 리워드로 만든다.
+                reward = self.get_reward(state,action)
+                action = torch.Tensor([action]).to(self.device)
+                s = torch.cat([s[-(self.n_split-1):],action],dim=0)
+                prev_state = state
+                cumulative_reward += reward
                 if _ == self.epi_step-2:
                     done = True
                 if len(self.buffer) > self.batch_size:
                     self.update_network()
                     self.soft_update_target_network(self.target_actor_network,self.actor_network)
                     self.soft_update_target_network(self.target_critic_network,self.critic_network)
-                    
+            self.actor_network.save_model(self.actor_network,CHECKPOINT_CRITIC+'.pt')
+            self.critic_network.save_model(self.critic_network,CHECKPOINT_ACTOR+'.pt')
+            print("============================================")
+            print('(',episode,'/',self.max_episode,')','episodes done')
+            print("cumulative reward: ",cumulative_reward)
+            print("============================================")
+            with open(os.path.dirname(os.path.realpath(__file__))+'/reward_data/reward.pickle', 'ab') as f:
+                pickle.dump(cumulative_reward,f)
