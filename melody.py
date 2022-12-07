@@ -132,7 +132,7 @@ class melody_learning:
         self.learning_rate = 0.00001
         self.split = True
         self.n_split = n_split
-        self.batch_size = 2048
+        self.batch_size = 128
         self.epoch = 10000
         
     def load_train_sample_tf(self):
@@ -200,6 +200,11 @@ class melody_learning:
         input_mini_batch = torch.Tensor(np.array(input_mini_batch)).to(self.device)
         target_mini_batch = torch.Tensor(np.array(target_mini_batch)).to(self.device)
         return input_mini_batch,target_mini_batch
+    
+    def normalize(self,x):
+        x = x - torch.Tensor(np.array([30,0,0.01])).to(self.device)
+        x = x / torch.Tensor(np.array([70,1,0.99])).to(self.device)
+        return x
         
     def learning(self):
         samples,avg_time,avg_note = self.load_train_sample_tf()
@@ -207,21 +212,19 @@ class melody_learning:
         optimizer = torch.optim.Adam(model.parameters(), lr=self.learning_rate)
         for _ in range(self.epoch):
             input_mini_batch,target_mini_batch = self.sampling_mini_batch(samples)
+            input_mini_batch = self.normalize(input_mini_batch)
+            target_mini_batch = self.normalize(target_mini_batch)
             y_pred = model(input_mini_batch)
             error = (y_pred-target_mini_batch)
-            error -= torch.Tensor(np.array([30,0,0.01])).to(self.device) #min: 0
-            error /= torch.Tensor(np.array([70,1,0.99])).to(self.device) #max: 1
-            error *= torch.Tensor(np.array([5,1,1])).to(self.device) # weights
+            error *= torch.Tensor(np.array([10,1,1])).to(self.device) # weights
             loss = ((error).squeeze()**2).mean()
-            print(loss)
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
             print('===================LSTM training===================')
             print("epoch:"+str(_+1))
             print("loss:"+str(loss.item()))
-            model.save_model(model,CHECKPOINT+'.pt')
-            
             with open(os.path.dirname(os.path.realpath(__file__))+'/loss_data/loss.pickle', 'ab') as f:
                 pickle.dump(loss.item(),f)
+        model.save_model(model,CHECKPOINT+'.pt')
         return samples

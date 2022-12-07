@@ -1,6 +1,7 @@
 import random
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import numpy as np
 import tensorflow as tf
 import pretty_midi
@@ -22,15 +23,22 @@ class ddpg:
     def __init__(self,n_split = 4,is_sample = False,sample = 0):
         with open(os.path.dirname(os.path.realpath(__file__))+'/reward_data/reward.pickle', 'wb') as f:
             pass
+        with open(os.path.dirname(os.path.realpath(__file__))+'/reward_data/critic_loss.pickle', 'wb') as f:
+            pass
+        with open(os.path.dirname(os.path.realpath(__file__))+'/reward_data/actor_loss.pickle', 'wb') as f:
+            pass
+
         ########hyperparameter########
-        self.lr = 0.001
+        self.lr = 0.0000001 #0.0000001
         self.memory_capacity = 100000
-        self.max_episode = 10000
+        self.max_episode = 2000
         self.n_split = n_split
-        self.epi_step = 500
+        self.epi_step = 100
         self.batch_size = 128
-        self.polyak = 0.95 #soft update target network
+        self.polyak = 0.99 #soft update target network
         self.gamma = 0.99
+        self.start_step = 1000
+        self.epsilon = 1
         
         # is sample
         self.is_sample = is_sample
@@ -130,6 +138,10 @@ class ddpg:
         actions = torch.Tensor(batch.action).long().to(self.device)
         rewards = torch.Tensor(batch.reward).to(self.device)
         dones = torch.Tensor(batch.done).to(self.device)
+        states = (states-torch.Tensor(np.array([30,0,0.01])).to(self.device))\
+            /torch.Tensor(np.array([70,1,0.99])).to(self.device)
+        actions = (actions-torch.Tensor(np.array([30,0,0.01])).to(self.device))\
+            /torch.Tensor(np.array([70,1,0.99])).to(self.device)
         ####################################################### normalization 한번 해야하지 않을까?
         with torch.no_grad():
             action_next = self.target_actor_network(next_states)
@@ -149,6 +161,8 @@ class ddpg:
         critic_loss.backward()
         self.actor_optim.step()
         self.critic_optim.step()
+        
+        return critic_loss.item(),actor_loss.item()
     
     def soft_update_target_network(self, target, source):
         for target_param, param in zip(target.parameters(), source.parameters()):
@@ -156,50 +170,82 @@ class ddpg:
         
     def select_action(self,action): # to exploration
         action = action.cpu().detach().numpy()
-        action += np.array([7,0.1,0.099])
-        action = np.clip(action,np.array([30,0,0.01]),np.array([100,1,1]))
-        random_actions = np.array([random.uniform(30,100),random.uniform(0,1),random.uniform(0.01,1)])
-        action += np.random.binomial(1, 0.3, 3)[0] * (random_actions - action)
+        random_actions = [[random.uniform(0,1),random.uniform(0,1),random.uniform(0,1)]]
+        self.epsilon *= 0.99999
+        if self.epsilon > random.uniform(0,1):
+            action = random_actions
+        else:
+            action = action
+        # action += np.random.binomial(1, 0.1, 3)[0] * (random_actions - action)
         return action
     
-    def get_reward(self,state,action):
-        state = state.cpu().detach().numpy()
-        normalized_error = (state - action)/np.array([70,1,0.99])
-        reward = -(normalized_error**2).mean()
+    def get_reward(self,s,s1):
+        error = self.net(s).detach()-self.net(s1).detach()
+        # error = state.detach() - action.detach()
+        error = error.cpu().squeeze()
+        # # dist = F.normalize(error)
+        error = error*np.array([10,1,1]) #weights
+        dist = (torch.sqrt(error**2)).mean()
+        reward = -10*dist
         return reward
+    
+    def normalize(self,x):
+        x = x - torch.Tensor(np.array([30,0,0.01])).to(self.device)
+        x = x / torch.Tensor(np.array([70,1,0.99])).to(self.device)
+        return x
     
     def learn(self):
         for episode in range(1,self.max_episode+1):
-            s = self.reset(self.sample)
+            s = self.normalize(self.reset(self.sample))
             done = False
             cumulative_reward = 0
+            critic_loss = 0
+            actor_loss = 0
             for _ in range(self.epi_step):
                 state = self.net(s)
                 if not(_ == 0):
                     action = action.squeeze()
-                    prev_state_ = prev_state.cpu().detach().numpy()
-                    state_ = state.cpu().detach().numpy()
+                    prev_state_ = prev_state.cpu().detach().numpy()[0]
+                    state_ = state.cpu().detach().numpy()[0]
                     action_ = action.cpu().detach().numpy()
-                    self.buffer.push(prev_state_,state_,action_,reward,done)
+                    # print('======================')
+                    # print(prev_state_)
+                    # print(state_)
+                    # print(action_)
+                    # print(reward.item())
+                    self.buffer.push(prev_state_,state_,action_,reward.item(), done)
                 action = self.select_action(self.actor_network(state))
                 #학습된 lstm의 output은 state지만, actor network의 output은 action이다. \
                     # 그 차이를 좁히기 위해 거리에 마이너스를 취해 리워드로 만든다.
-                reward = self.get_reward(state,action)
-                action = torch.Tensor([action]).to(self.device)
-                s = torch.cat([s[-(self.n_split-1):],action],dim=0)
+                action = torch.Tensor(action).to(self.device)
+                action = self.normalize(action)
+                s_prime = s
+                s = torch.cat([s_prime[-(self.n_split-1):],action],dim=0)
+                s1 = torch.cat([s_prime[-(self.n_split-1):],state],dim=0)
+                reward = self.get_reward(s,s1)
+                # print('======')
+                # print(s)
+                # print(s1)
                 prev_state = state
                 cumulative_reward += reward
                 if _ == self.epi_step-2:
                     done = True
-                if len(self.buffer) > self.batch_size:
-                    self.update_network()
+                if len(self.buffer) > self.start_step:
+                    c_l,a_l = self.update_network()
+                    critic_loss += c_l
+                    actor_loss += a_l
                     self.soft_update_target_network(self.target_actor_network,self.actor_network)
                     self.soft_update_target_network(self.target_critic_network,self.critic_network)
             self.actor_network.save_model(self.actor_network,CHECKPOINT_CRITIC+'.pt')
             self.critic_network.save_model(self.critic_network,CHECKPOINT_ACTOR+'.pt')
             print("============================================")
             print('(',episode,'/',self.max_episode,')','episodes done')
-            print("cumulative reward: ",cumulative_reward)
+            print("cumulative reward: ",cumulative_reward/self.epi_step)
             print("============================================")
             with open(os.path.dirname(os.path.realpath(__file__))+'/reward_data/reward.pickle', 'ab') as f:
-                pickle.dump(cumulative_reward,f)
+                pickle.dump(cumulative_reward/self.epi_step,f)
+            if len(self.buffer) > self.start_step:
+                with open(os.path.dirname(os.path.realpath(__file__))+'/reward_data/critic_loss.pickle', 'ab') as f:
+                    pickle.dump(critic_loss/self.epi_step,f)
+                with open(os.path.dirname(os.path.realpath(__file__))+'/reward_data/actor_loss.pickle', 'ab') as f:
+                    pickle.dump(actor_loss/self.epi_step,f)
