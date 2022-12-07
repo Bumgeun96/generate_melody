@@ -28,7 +28,7 @@ class ddpg:
         self.max_episode = 10000
         self.n_split = n_split
         self.epi_step = 500
-        self.batch_size = 2
+        self.batch_size = 128
         self.polyak = 0.95 #soft update target network
         self.gamma = 0.99
         
@@ -47,8 +47,7 @@ class ddpg:
             self.sample = sample
         else:
             self.sample = self.loading_sample(n_split = self.n_split)
-            
-        print(self.sample)
+        
         
         # create the network
         self.actor_network = actor().to(self.device)
